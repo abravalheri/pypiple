@@ -12,6 +12,7 @@
     - id: end-of-file-fixer
     - id: fix-encoding-pragma
     - id: flake8
+      args: [--diff, "--exclude=docs,tests"]
     - id: name-tests-test
     - id: pretty-format-json
     - id: requirements-txt-fixer
