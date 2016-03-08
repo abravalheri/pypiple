@@ -18,7 +18,7 @@ Note: This skeleton file can be safely removed if not needed!
 import logging
 from collections import namedtuple
 from glob import glob
-from os.path import getmtime, isfile, join
+from os.path import getmtime, isfile, join, splitext
 
 import pkginfo
 import semver
@@ -33,6 +33,10 @@ __license__ = 'Mozilla Public License Version 2.0'
 PKG_FIELDS = (
     'name version summary home_page download_url maintainer maintainer_email'
 ).split()
+""".. PKG_FIELDS_:
+
+list of metadata to be retrieved from pakage
+"""
 
 PKGINFO_CLASSES = {
     'whl': pkginfo.Wheel,
@@ -42,6 +46,11 @@ PKGINFO_CLASSES = {
 
 
 def filter_info(info):
+    """Filter most relevant information about package.
+    
+    Returns:
+        A dict with PKG_FIELDS_ key.
+    """
     filtered = {field: getattr(info, field) for field in PKG_FIELDS}
 
     if not info.maintainer:
@@ -51,19 +60,31 @@ def filter_info(info):
     return filtered
 
 
-def find_packages_by_ext(path, ext):
-    decoder = PKGINFO_CLASSES[ext]
-    files = glob(join(path, '*.{}'.format(ext)))
-    return [decoder(file_path) for file_path in files]
+def retrieve_data(path):
+    """Retrieve metadata about the python package.
+
+    Returns:
+        A dict with PKG_FIELDS_ key.
+    """
+
+    base, ext = splitext(path)
+    info = PKGINFO_CLASSES[ext](path)
+    return filter_info(info)
 
 
-def find_packages(path):
-    pkgs = [find_packages_by_ext(path, ext) for ext in PKGINFO_CLASSES.keys()]
-    return concatenate(pkgs)
+#def find_packages_by_ext(path, ext):
+#    decoder = PKGINFO_CLASSES[ext]
+#    files = glob(join(path, '*.{}'.format(ext)))
+#    return [decoder(file_path) for file_path in files]
 
 
-def get_name(pkg):
-    return pkg["name"]
+#def find_packages(path):
+#    pkgs = [find_packages_by_ext(path, ext) for ext in PKGINFO_CLASSES.keys()]
+#    return concatenate(pkgs)
+
+
+#def get_name(pkg):
+#    return pkg["name"]
 
 
 def compare_versions(pkg1, pkg2):
@@ -73,21 +94,116 @@ def compare_versions(pkg1, pkg2):
 class Index(object):
     """docstring for Index
 
-    Support:
-        *.whl - binary packages created with `setup.py bdist_wheel`
-        *.egg - binary packages created with `setup.py bdist_egg`
-        *.tar.gz - source packages created with `setup.py sdist`
+    .. _support:
+
+    Note:
+        The following package formats are supported:
+
+        ``*.whl`` - binary packages created with ``setup.py bdist_wheel``
+        ``*.egg`` - binary packages created with ``setup.py bdist_egg``
+        ``*.tar.gz`` - source packages created with ``setup.py sdist``
+
+        Package format is deduced from file extension.
     """
 
-    def __init__(self, dirs):
+    def __init__(self, path):
         super(Index, self).__init__()
-        self.dirs = list(dirs)
+        self.path = path
         self._cache = {
-            'time': None,
-            'by_dir': {path: [] for path in dirs},
-            'list': [],
-            'by_name': {},
+            'mtime': None,  # => last index update
+            'lookup': {},  # => primary source of true
+            'packages': {},  # => groupedby name
         }
+
+
+    def uptodate(self):
+        """Discover if the index cache is uptodate.
+
+        Returns:
+            True if no change in index directory since the last update
+        """
+        mtime = self.mtime()
+
+        return mtime and mtime >= getmtime(self.path)
+
+
+    def mtime(self, pkg=None):
+        """Retrieve the time instant when the index where updated.
+
+        Keyword Arguments:
+            pkg (string): path to a package. When given, this method will
+            return the mtime of the file, read during the last update.
+            Default is None.
+
+        Returns:
+            Time instant for the last update in index, or the cached mtime
+            value for a specified package.
+        """
+        if pkg:
+            return self._cache['lookup'][pkg]['mtime']
+
+        return self._cache['mtime']
+
+
+    def scan(self):
+        """Scan the index directory searching for python packages.
+
+        See support_.
+
+        Returns:
+            List of paths for package files inside index directory.
+        """
+        types = PKGINFO_CLASSES.keys()
+        pkgs = [glob(join(path, '*.{}'.format(ext))) for ext in types]
+        return concatenate(pkgs)
+
+
+    def diff(self, pkgs):
+        """Compute the difference between index cache and the given list
+        of paths for packages.
+
+        Arguments:
+            pks (List[str]): List of paths pointing to python packages
+
+        Returns:
+            Tuple with 3 elements.
+            The first element is a list of packages present in the given list
+            but absent in the index cache.
+            The second element is a list of packages present in both, but
+            have been modified.
+            The last element is a list of packages absent in the given list,
+            but present in the index cache.
+        """
+        cached = set(self._cache['lookup'].keys())
+        current = set(pkgs)
+
+        added = current - cached
+        removed = cached - current
+        suspects = current & cached  # intersection
+        dirty = [pkg for pkg in suspects if getmtime(pkg) > self.mtime(pkg)]
+
+        return (added, dirty, removed)
+
+
+    def update(self):
+        if self.uptodate():
+            return ([], [])
+
+        current = self.scan()
+        (added, dirty, removed) = self.diff(current)
+
+        for path in removed:
+            del self._cache['lookup'][path]
+
+        modified = added + dirty
+        self._cache['lookup'].update({
+            path: retrieve_data(path) for path in modified})
+
+        # Expire cache
+        self._cache['packages'] = []
+
+        return (modified, removed)
+
 
     @property
     def packages(self):
