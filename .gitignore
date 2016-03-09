@@ -7,10 +7,13 @@
 
 .env
 .python-version
+.cache
+.coverage
 .coveragerc
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg*
 
 build/
 dist/

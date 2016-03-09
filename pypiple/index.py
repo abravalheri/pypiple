@@ -15,9 +15,10 @@ from glob import glob
 from itertools import groupby
 from operator import add, itemgetter
 from os.path import basename, getmtime, join, splitext
+from time import time
 
 import pkginfo
-from six.moves import reduce  # noqa, pylint: disable=W0622
+from six.moves import reduce  # noqa, pylint: disable=redefined-builtin
 
 from pypiple import __version__  # noqa
 
@@ -180,7 +181,7 @@ class Index(object):
         added = current - cached
         removed = cached - current
         suspects = current & cached  # intersection
-        dirty = [pkg for pkg in suspects if getmtime(pkg) > self.mtime(pkg)]
+        dirty = {pkg for pkg in suspects if getmtime(pkg) > self.mtime(pkg)}
 
         return (added, dirty, removed)
 
@@ -203,7 +204,7 @@ class Index(object):
         for path in removed:
             del self._cache['lookup'][path]
 
-        modified = added + dirty
+        modified = list(added) + list(dirty)
         self._cache['lookup'].update(
             {path: retrieve_data(path) for path in modified})
         # retrieve_data will return None if pkg decoding fails,
@@ -211,6 +212,9 @@ class Index(object):
 
         # Expire cache: be lazy and regenerate it on demand
         self._cache['packages'] = None
+
+        # Store 'last-updated' info
+        self._cache['mtime'] = time()
 
         return (modified, removed)
 
