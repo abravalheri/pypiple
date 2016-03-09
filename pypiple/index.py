@@ -1,44 +1,38 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-This is a skeleton file that can serve as a starting point for a Python
-console script. To run this script uncomment the following line in the
-entry_points section in setup.cfg:
+"""Functions and classes used to build a package index.
 
-    console_scripts =
-     fibonacci = pypiple.skeleton:run
+.. _PKG_FIELDS:
+.. data:: PKG_FIELDS
 
-Then run `python setup.py install` which will install the command `fibonacci`
-inside your current environment.
-Besides console scripts, the header (i.e. until _logger...) of this file can
-also be used as template for Python modules.
+    list of metadata to be retrieved from package
 
-Note: This skeleton file can be safely removed if not needed!
+.. data:: PKG_DECODERS
+    mechanism used to extract package information, according to extension
 """
 import logging
-from collections import namedtuple
 from glob import glob
-from os.path import getmtime, isfile, join, splitext
+from itertools import groupby
+from operator import add, itemgetter
+from os.path import basename, getmtime, join, splitext
 
 import pkginfo
-import semver
+from six.moves import reduce  # noqa, pylint: disable=W0622
 
-from pypiple import __version__
-from pypiple.utils import concatenate
+from pypiple import __version__  # noqa
 
 __author__ = 'Anderson Bravalheri'
 __copyright__ = 'Anderson Bravalheri'
 __license__ = 'Mozilla Public License Version 2.0'
 
+LOGGER = logging.getLogger(__name__)
+
 PKG_FIELDS = (
-    'name version summary home_page download_url maintainer maintainer_email'
-).split()
-""".. PKG_FIELDS_:
+    'name', 'version', 'summary', 'home_page ',
+    'download_url', 'maintainer', 'maintainer_email',
+)
 
-list of metadata to be retrieved from pakage
-"""
-
-PKGINFO_CLASSES = {
+PKG_DECODERS = {
     'whl': pkginfo.Wheel,
     'egg': pkginfo.BDist,
     'tar.gz': pkginfo.SDist,
@@ -46,10 +40,10 @@ PKGINFO_CLASSES = {
 
 
 def filter_info(info):
-    """Filter most relevant information about package.
-    
+    """Select most relevant information about package.
+
     Returns:
-        A dict with PKG_FIELDS_ key.
+        A dict with all keys in PKG_FIELDS_.
     """
     filtered = {field: getattr(info, field) for field in PKG_FIELDS}
 
@@ -64,35 +58,37 @@ def retrieve_data(path):
     """Retrieve metadata about the python package.
 
     Returns:
-        A dict with PKG_FIELDS_ key.
+        A dict with all keys in PKG_FIELDS_.
     """
-
-    base, ext = splitext(path)
-    info = PKGINFO_CLASSES[ext](path)
-    return filter_info(info)
-
-
-#def find_packages_by_ext(path, ext):
-#    decoder = PKGINFO_CLASSES[ext]
-#    files = glob(join(path, '*.{}'.format(ext)))
-#    return [decoder(file_path) for file_path in files]
+    try:
+        _, ext = splitext(path)
+        info = PKG_DECODERS[ext](path)
+        data = filter_info(info)
+        data['mtime'] = getmtime(path)
+        return data
+    except (RuntimeError, ValueError):
+        LOGGER.error('Unnable to read information about %s', basename(path))
 
 
-#def find_packages(path):
-#    pkgs = [find_packages_by_ext(path, ext) for ext in PKGINFO_CLASSES.keys()]
-#    return concatenate(pkgs)
+def extract_version(pkg):
+    """Assume SemVer and produce a comparable object
 
+    See `<http://semver.org>`_
+    """
+    relevant = pkg['version'].split('+')[0]  # ignore build info
+    components = relevant.split('-')
+    main = components[0]
+    alias = components[1] if len(components) > 1 else ''  # e.g.: alpha, beta
 
-#def get_name(pkg):
-#    return pkg["name"]
-
-
-def compare_versions(pkg1, pkg2):
-    return semver.compare(pkg1['version'], pkg2['version'])
+    return tuple(main.split('.') + [alias])
 
 
 class Index(object):
-    """docstring for Index
+    """Index of python packages inside a given directory path.
+
+    This class assumes all packages are store into a single directory.
+    The ``update`` method is used to sync the in-memory index with the
+    current state of the storage directory.
 
     .. _support:
 
@@ -107,14 +103,21 @@ class Index(object):
     """
 
     def __init__(self, path):
+        """Cache-enabled index generator instance.
+
+        After created the index is empty. In order to synchronize its contents
+        with the underlaying directory, please use the method ``update``.
+
+        Arguments:
+            path (str): path to the directory used to store packages
+        """
         super(Index, self).__init__()
         self.path = path
         self._cache = {
             'mtime': None,  # => last index update
             'lookup': {},  # => primary source of true
-            'packages': {},  # => groupedby name
+            'packages': None,  # => groupedby name
         }
-
 
     def uptodate(self):
         """Discover if the index cache is uptodate.
@@ -125,7 +128,6 @@ class Index(object):
         mtime = self.mtime()
 
         return mtime and mtime >= getmtime(self.path)
-
 
     def mtime(self, pkg=None):
         """Retrieve the time instant when the index where updated.
@@ -144,7 +146,6 @@ class Index(object):
 
         return self._cache['mtime']
 
-
     def scan(self):
         """Scan the index directory searching for python packages.
 
@@ -153,10 +154,9 @@ class Index(object):
         Returns:
             List of paths for package files inside index directory.
         """
-        types = PKGINFO_CLASSES.keys()
-        pkgs = [glob(join(path, '*.{}'.format(ext))) for ext in types]
-        return concatenate(pkgs)
-
+        types = PKG_DECODERS.keys()
+        pkgs = [glob(join(self.path, '*.{}'.format(ext))) for ext in types]
+        return reduce(add, pkgs)
 
     def diff(self, pkgs):
         """Compute the difference between index cache and the given list
@@ -184,8 +184,16 @@ class Index(object):
 
         return (added, dirty, removed)
 
-
     def update(self):
+        """Update index cache based on the current state of the directory.
+
+        Returns:
+            Tuple with 2 elements.
+            The first element is a list of packages modified since
+            the last update.
+            The second element is a list of packages removed since
+            the last update.
+        """
         if self.uptodate():
             return ([], [])
 
@@ -196,34 +204,33 @@ class Index(object):
             del self._cache['lookup'][path]
 
         modified = added + dirty
-        self._cache['lookup'].update({
-            path: retrieve_data(path) for path in modified})
+        self._cache['lookup'].update(
+            {path: retrieve_data(path) for path in modified})
+        # retrieve_data will return None if pkg decoding fails,
+        # therefore, it's necessary to check null values
 
-        # Expire cache
-        self._cache['packages'] = []
+        # Expire cache: be lazy and regenerate it on demand
+        self._cache['packages'] = None
 
         return (modified, removed)
 
-
     @property
     def packages(self):
-        dirs = self.dirs
-        cache = self._cache
+        """List of packages
 
-        if cache['time'] is None:
-            changed = dirs
-        else:
-            changed = [path for path in dirs if cache['time'] < getmtime(path)]
+        Lazy generated dictionary containing all different versions
+        for each package,indexed by its name.
+        """
 
-        if changed:
-            for path in changed:
-                cache['by_dir'][path] = find_packages(path)
+        cache = self._cache['packages']
+        if cache is not None:
+            return cache
 
-            all_pkgs = concatenate(cache['by_dir'].values())
-            by_name = groupby(all_pkgs, key=lambda pkg: pkg['name'])
-            by_name = {
-                name: list(pkgs).sort(compare_versions)
-                for name, pkgs in by_name}
-            pkgs = sorted(by_name, key=get_name)
+        cache = self._cache['lookup'].values()
+        pkgs = {
+            name: sorted(infos, key=extract_version, reverse=True)
+            for name, infos in groupby(cache, key=itemgetter('name'))
+        }
+        self._cache['packages'] = pkgs
 
-            cache['list'] = pkgs.sort(compare_versions)  # WIP
+        return pkgs
