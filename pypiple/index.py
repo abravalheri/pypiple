@@ -157,7 +157,7 @@ class Index(object):
         """
         types = PKG_DECODERS.keys()
         pkgs = [glob(join(self.path, '*.{}'.format(ext))) for ext in types]
-        return reduce(add, pkgs)
+        return reduce(add, pkgs)  # merge arrays
 
     def diff(self, pkgs):
         """Compute the difference between index cache and the given list
