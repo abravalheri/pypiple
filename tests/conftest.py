@@ -63,3 +63,29 @@ def package_dir(tmpdir, package_files, extra_files):
             pass
 
     return dirpath
+
+
+def retrieve_data(path, packages):
+    """Retrieve metadata about the dummy package.
+
+    Returns:
+        A dict with all keys in PKG_FIELDS_.
+    """
+    try:
+        basename = os.path.basename(path)
+        data = [pkg for pkg in packages if filename(pkg) == basename][0].copy()
+        data['mtime'] = os.path.getmtime(path)
+        return data
+    except (RuntimeError, ValueError, KeyError):
+        LOGGER.error('Unnable to read information about %s', basename(path))
+
+
+@pytest.fixture()
+def index_with_fake_retrieve(monkeypatch, packages):
+  """Version of Index monkeypatched to not use pkginfo"""
+
+  fake = lambda path: retrieve_data(path, packages)
+  monkeypatch.setattr('pypiple.index.retrieve_data', fake)
+  import pypiple.index
+
+  return pypiple.index.Index
