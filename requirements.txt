@@ -1,2 +1,3 @@
 pkginfo
+property-manager
 six

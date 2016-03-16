@@ -18,6 +18,7 @@ from os.path import basename, getmtime, join, splitext
 from time import time
 
 import pkginfo
+from property_manager import PropertyManager, cached_property
 from six.moves import reduce  # noqa, pylint: disable=redefined-builtin
 
 from pypiple import __version__  # noqa
@@ -84,7 +85,7 @@ def extract_version(pkg):
     return tuple(main.split('.') + [alias])
 
 
-class Index(object):
+class Index(PropertyManager):
     """Index of python packages inside a given directory path.
 
     This class assumes all packages are store into a single directory.
@@ -114,11 +115,8 @@ class Index(object):
         """
         super(Index, self).__init__()
         self.path = path
-        self._cache = {
-            'mtime': None,  # => last index update
-            'lookup': {},  # => primary source of true
-            'packages': None,  # => groupedby name
-        }
+        self._mtime = None  # => last index update
+        self._metadata = {}  # => primary source of true
 
     def uptodate(self):
         """Discover if the index cache is uptodate.
@@ -143,9 +141,9 @@ class Index(object):
             value for a specified package.
         """
         if pkg:
-            return self._cache['lookup'][pkg]['mtime']
+            return self.metadata[pkg]['mtime']
 
-        return self._cache['mtime']
+        return self._mtime
 
     def scan(self):
         """Scan the index directory searching for python packages.
@@ -175,7 +173,7 @@ class Index(object):
             The last element is a list of packages absent in the given list,
             but present in the index cache.
         """
-        cached = set(self._cache['lookup'].keys())
+        cached = set(self.files)
         current = set(pkgs)
 
         added = current - cached
@@ -202,39 +200,53 @@ class Index(object):
         (added, dirty, removed) = self.diff(current)
 
         for path in removed:
-            del self._cache['lookup'][path]
+            del self._metadata[path]
 
         modified = list(added) + list(dirty)
-        self._cache['lookup'].update(
+        self._metadata.update(
             {path: retrieve_data(path) for path in modified})
         # retrieve_data will return None if pkg decoding fails,
         # therefore, it's necessary to check null values
 
         # Expire cache: be lazy and regenerate it on demand
-        self._cache['packages'] = None
+        self.clear_cached_properties()
 
         # Store 'last-updated' info
-        self._cache['mtime'] = time()
+        self._mtime = time()
 
         return (modified, removed)
 
-    @property
+    @cached_property
+    def files(self):
+        """List of indexed files
+
+        Lazy generated list containing all the files inside index
+        directory whose type is supported.
+
+        See support_.
+        """
+
+        return self.metadata.keys()
+
+    @cached_property
+    def metadata(self):
+        """List of metadata about packages
+
+        Lazy generated list containing all the metadata about indexed packages.
+        """
+
+        return self._metadata
+
+    @cached_property
     def packages(self):
         """List of packages
 
         Lazy generated dictionary containing all different versions
-        for each package,indexed by its name.
+        for each package, indexed by its name.
         """
 
-        cache = self._cache['packages']
-        if cache is not None:
-            return cache
-
-        cache = self._cache['lookup'].values()
-        pkgs = {
+        cache = self.metadata.values()
+        return {
             name: sorted(infos, key=extract_version, reverse=True)
             for name, infos in groupby(cache, key=itemgetter('name'))
         }
-        self._cache['packages'] = pkgs
-
-        return pkgs

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # isort:skip_file
+# pylint: disable=redefined-outer-name
 
 """
     Dummy conftest.py for pypiple.
@@ -13,8 +14,11 @@
 from __future__ import print_function, absolute_import, division
 
 import os
+from time import time
 
 import pytest
+
+from pypiple.index import Index
 
 
 def filename(pkg):
@@ -31,10 +35,10 @@ def extra_files():
 
 
 @pytest.fixture()
-def packages():
+def package_data():
     """Dummy package metadata"""
 
-    return [
+    pkgs = [
         {'name': 'some-pkg', 'version': '3.0.0', 'ext': 'whl'},
         {'name': 'some-pkg', 'version': '2.0.0', 'ext': 'egg'},
         {'name': 'some-pkg', 'version': '1.0.0', 'ext': 'tar.gz'},
@@ -43,12 +47,16 @@ def packages():
         {'name': 'other-pkg', 'version': '0.0.0-alpha', 'ext': 'tar.gz'},
     ]
 
+    mtime = {'mtime': time()}
+
+    return [pkg.update(mtime) or pkg for pkg in pkgs]  # dict merge
+
 
 @pytest.fixture()
-def package_files(packages):
+def package_files(package_data):
     """Dummy package files"""
 
-    return [filename(pkg) for pkg in packages]
+    return [filename(pkg) for pkg in package_data]
 
 
 @pytest.fixture()
@@ -65,27 +73,22 @@ def package_dir(tmpdir, package_files, extra_files):
     return dirpath
 
 
-def retrieve_data(path, packages):
-    """Retrieve metadata about the dummy package.
+@pytest.fixture()
+def package_paths(package_dir, package_files):
+    """Paths to dummy packages"""
 
-    Returns:
-        A dict with all keys in PKG_FIELDS_.
-    """
-    try:
-        basename = os.path.basename(path)
-        data = [pkg for pkg in packages if filename(pkg) == basename][0].copy()
-        data['mtime'] = os.path.getmtime(path)
-        return data
-    except (RuntimeError, ValueError, KeyError):
-        LOGGER.error('Unnable to read information about %s', basename(path))
+    return [os.path.join(package_dir, pkg) for pkg in package_files]
 
 
 @pytest.fixture()
-def index_with_fake_retrieve(monkeypatch, packages):
-  """Version of Index monkeypatched to not use pkginfo"""
+def index(package_dir, package_data, package_paths):
+    """
+    Dummy package index, pre-initialized
+    """
 
-  fake = lambda path: retrieve_data(path, packages)
-  monkeypatch.setattr('pypiple.index.retrieve_data', fake)
-  import pypiple.index
+    pkg_index = Index(package_dir)
+    # monkeypatch cached properties to avoid system calls
+    pkg_index.__dict__['files'] = package_paths
+    pkg_index.__dict__['metadata'] = dict(zip(package_paths, package_data))
 
-  return pypiple.index.Index
+    return pkg_index

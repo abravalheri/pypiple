@@ -11,22 +11,17 @@ __copyright__ = 'Anderson Bravalheri'
 __license__ = 'Mozilla Public License Version 2.0'
 
 
-def test_scan_list_packages(package_dir, package_files):
+def test_scan_list_packages(package_dir, package_paths):
     """
     scan should return a list containing all ``.egg``s,  ``.whl``s
     and ``.tar.gz``s inside directory
     """
 
-    expected = [
-        os.path.join(package_dir, pkg)
-        for pkg in package_files
-    ]
-
     index = Index(package_dir)
     pkgs = index.scan()
 
-    for name in expected:
-        assert name in pkgs
+    for path in package_paths:
+        assert path in pkgs
 
 
 def test_scan_not_list_extra_files(package_dir, extra_files):
