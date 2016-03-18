@@ -47,7 +47,7 @@ def test_diff_list_dirty_packages(package_paths, package_data, index):
     index.__dict__['metadata'] = dict(zip(
         package_paths,
         [
-            data.update(mtime) or data if i < 2 else data
+            (data.update(mtime) or data) if i < 2 else data  # dict merge
             for i, data in enumerate(package_data)
         ]
     ))
