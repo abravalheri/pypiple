@@ -1,6 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Functions and classes used to build a package index.
+"""
+Pypiple index
+-------------
+
+Domain logic behing pypiple.
+
+The class ``pypiple.index.Index`` is used to build a logic package index.
+This index contains meta-information about all packages inside a given
+directory, like file paht, author, homepage, etc and provides fast lookup
+search methods. The index is also groups different versions of the same
+package and is able to recognize if the cached metadata is uptodate with
+the underlaying file system.
 
 .. _PKG_FIELDS:
 .. data:: PKG_FIELDS
@@ -30,8 +41,9 @@ __license__ = 'Mozilla Public License Version 2.0'
 LOGGER = logging.getLogger(__name__)
 
 PKG_FIELDS = (
-    'name', 'version', 'summary', 'home_page ',
-    'download_url', 'maintainer', 'maintainer_email',
+    'name', 'version', 'summary', 'home_page ', 'description', 'keywords',
+    'platform', 'classifiers', 'download_url', 'author', 'author_email',
+    'maintainer', 'maintainer_email',
 )
 
 PKG_DECODERS = {
@@ -44,8 +56,11 @@ PKG_DECODERS = {
 def filter_info(info):
     """Select most relevant information about package.
 
+    Arguments:
+        info (object): object with all attributes defined in PKG_FIELDS_.
+
     Returns:
-        A dict with all keys in PKG_FIELDS_.
+        A dict with all keys in defined PKG_FIELDS_.
     """
     filtered = {field: getattr(info, field) for field in PKG_FIELDS}
 
@@ -57,10 +72,13 @@ def filter_info(info):
 
 
 def retrieve_data(path):
-    """Retrieve metadata about the python package.
+    """Retrieve metadata about a python package.
+
+    Arguments:
+        path (string): path to the package
 
     Returns:
-        A dict with all keys in PKG_FIELDS_.
+        A dict with all keys defined in PKG_FIELDS_.
     """
     try:
         _, ext = splitext(path)
@@ -73,9 +91,17 @@ def retrieve_data(path):
 
 
 def extract_version(pkg):
-    """Assume SemVer and produce a comparable object
+    """Produce a comparable object from package version string.
 
+    This functions assumes the package uses Semantic Versioning conventions.
     See `<http://semver.org>`_
+
+    Arguments:
+        pkg: ``dict``-like object containing package metadata.
+            Required key: ``version``.
+
+    Returns:
+        tuple: components of a semantic version
     """
     relevant = pkg['version'].split('+')[0]  # ignore build info
     components = relevant.split('-')
@@ -194,7 +220,7 @@ class Index(PropertyManager):
             the last update.
         """
         if self.uptodate():
-            return ([], [])
+            return None
 
         current = self.scan()
         (added, dirty, removed) = self.diff(current)
@@ -202,7 +228,7 @@ class Index(PropertyManager):
         for path in removed:
             del self._metadata[path]
 
-        modified = list(added) + list(dirty)
+        modified = added | dirty  # union off sets
         self._metadata.update(
             {path: retrieve_data(path) for path in modified})
         # retrieve_data will return None if pkg decoding fails,
