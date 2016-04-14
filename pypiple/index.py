@@ -167,7 +167,7 @@ class Index(PropertyManager):
             value for a specified package.
         """
         if pkg:
-            return self.metadata[pkg]['mtime']
+            return self.metadata[pkg]['mtime']  # pylint: disable=unsubscriptable-object
 
         return self._mtime
 
@@ -252,7 +252,7 @@ class Index(PropertyManager):
         See support_.
         """
 
-        return self.metadata.keys()
+        return self.metadata.keys()  # pylint: disable=no-member
 
     @cached_property
     def metadata(self):
@@ -271,7 +271,7 @@ class Index(PropertyManager):
         for each package, indexed by its name.
         """
 
-        cache = self.metadata.values()
+        cache = self.metadata.values()  # pylint: disable=no-member
         return {
             name: sorted(infos, key=extract_version, reverse=True)
             for name, infos in groupby(cache, key=itemgetter('name'))

@@ -1,5 +1,5 @@
 pkginfo
 property-manager
+selector
 six
 webob
-selector

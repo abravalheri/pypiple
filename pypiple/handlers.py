@@ -4,27 +4,35 @@
 Pypiple Request Handlers
 ------------------------
 """
+from webob import Response
 from webob.dec import wsgify
+
 
 class AbstractHandler(object):
     """docstring for """
+
     def __init__(self, index, mount_points, paths):
+        """TODO"""
         self.index = index
         self.mount_points = mount_points
         self.paths = paths
         self._cache = {}
 
-    def cache(key, default, *args, **kwargs):
+    def cache(self, key, default, *args, **kwargs):
+        """TODO"""
         return (
-            self.cache.get(key) or
-            self.cache.setdefault(key, default(*args, **kwargs))
+            self.cache.get(key) or  # pylint: disable=no-member
+            self.cache.setdefault(key, default(  # pylint: disable=no-member
+                *args, **kwargs))
         )
 
-    def expire(key):
+    def expire(self, key):
+        """TODO"""
         self._cache[key] = None
 
     @wsgify
     def __call__(self, req):
+        """TODO"""
         changed = self.index.update()
 
         if changed is not None:
@@ -35,9 +43,11 @@ class AbstractHandler(object):
         return Response(self.cache(':response', self.render))
 
     def render(self):
+        """TODO"""
         raise NotImplementedError
 
 
+# pylint: disable=abstract-method,missing-docstring
 class FancyCollectionHandler(AbstractHandler):
     pass
 

@@ -1,3 +1,4 @@
+pylint
 pytest
 # Add requirements only needed for your unittests and during development here.
 # They will be installed automatically when running `python setup.py test`.

@@ -10,13 +10,13 @@ Usefull Middleware for WSGI applications.
     access for static files with specifics extensions.
 """
 
-from webob.exc import HTTPNotFound
 from webob.dec import wsgify
+from webob.exc import HTTPNotFound
 
 
 @wsgify.middleware
 def filter_path(req, app, path_filter):
-    """Restrict access to requested paths
+    r"""Restrict access to requested paths
 
     Arguments:
         path_filter: object with a `search` method that returns Truthy or Falsy

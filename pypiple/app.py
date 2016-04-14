@@ -8,14 +8,13 @@ monkey.patch_all()  # isort:skip
 
 import re
 from os import getcwd, path
+from pkg_resources import resource_filename
 
 import livereload
-from pkg_resources import resource_filename
 from selector import Selector
-from webob import Response
-from webob.dec import wsgify
 from webob.static import DirectoryApp
 
+from pypiple.handlers import FancyCollectionHandler
 from pypiple.index import Index
 from pypiple.middleware import filter_path
 
@@ -39,6 +38,7 @@ PACKAGES_EXT = 'tar.gz|whl|egg'
 
 
 def application():
+    """TODO"""
 
     mount_points = {
         'index': PREFFIX,
@@ -55,20 +55,20 @@ def application():
     index = Index(paths['templates'])
 
     filters = {
+        # filter packages by extension
         'packages': re.compile(
             r'\.({})$'.format(PACKAGES_EXT.replace('.', r'\.')), re.I),
-            # filter packages by extension
+        # filter static files by extension
         'assets': re.compile(
             r'\.({})$'.format(ASSETS_EXT.replace('.', r'\.')), re.I),
-            # filter static files by extension
     }
 
     handlers = {
-        'index': IndexHandler(index, mount_points, paths),
-        'packages': filter_path(
+        'index': FancyCollectionHandler(index, mount_points, paths),
+        'packages': filter_path(  # pylint: disable=no-value-for-parameter
             DirectoryApp(paths['packages'], index_page=None),
             filters['packages']),
-        'assets': filter_path(
+        'assets': filter_path(  # pylint: disable=no-value-for-parameter
             DirectoryApp(paths['assets'], index_page=None),
             filters['assets']),
     }
@@ -80,10 +80,10 @@ def application():
 
     return Selector(mappings=routes)
 
-app = application()
+app = application()  # pylint: disable=invalid-name
 
 if __name__ == '__main__':
-    server = livereload.Server(app)
+    server = livereload.Server(app)  # pylint: disable=invalid-name
 
     server.watch(
         'pypiple/static/style.scss', livereload.shell(
